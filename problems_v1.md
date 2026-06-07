@@ -1,0 +1,3 @@
+- by sku error
+- maybe hard to use (make gui but like opautoclicker where its minimal)
+- some products cant use flatrate, (cheap products), add condition (ex all except <90THB )
