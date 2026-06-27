@@ -53,6 +53,7 @@ DIM    = "\033[2m"
 # ── Constants ─────────────────────────────────────────────────────────────────
 SHOPEE_MIN = 1
 SHOPEE_MAX = 500_000
+VAT_RATE = 0.07
 HEADER_ROWS = 6
 COL_PRODUCT_ID   = 1   # A
 COL_PRODUCT_NAME = 2   # B
@@ -191,6 +192,26 @@ def calc_price_pct(old_price, pct):
 
 def calc_price_flat(old_price, amount):
     new_price = round(old_price + amount, 2)
+    capped = False
+    if new_price < SHOPEE_MIN:
+        new_price = SHOPEE_MIN
+        capped = True
+    if new_price > SHOPEE_MAX:
+        new_price = SHOPEE_MAX
+        capped = True
+    return new_price, capped
+
+def calc_price_vat(old_price):
+    new_price = round(old_price * (1 + VAT_RATE))
+    capped = False
+    if new_price > SHOPEE_MAX:
+        new_price = SHOPEE_MAX
+        capped = True
+    return new_price, capped
+
+def calc_price_markup_vat(old_price, markup=2.5):
+    cost = (old_price - 9) / 2
+    new_price = round(cost * markup * (1 + VAT_RATE))
     capped = False
     if new_price < SHOPEE_MIN:
         new_price = SHOPEE_MIN
@@ -1072,6 +1093,8 @@ SELECTION_OPTIONS = {
     "2": ("By size",        ""),
     "3": ("By color",       ""),
     "4": ("Specific SKUs",  ""),
+    "5": ("VAT +7%",        ""),
+    "6": ("Markup x2.5 + VAT", ""),
 }
 
 EDIT_OPTIONS = {
@@ -1084,6 +1107,8 @@ GROUP_MAP = {
     "2": "size",
     "3": "color",
     "4": "sku",
+    "5": "vat",
+    "6": "markup_vat",
 }
 
 def select_selection_arrow():
@@ -1093,6 +1118,8 @@ def select_selection_arrow():
         ("2", "By size",        ""),
         ("3", "By color",       ""),
         ("4", "Specific SKUs",  ""),
+        ("5", "VAT +7%",        ""),
+        ("6", "Markup x2.5 + VAT", ""),
     ]
     return select_menu_arrow(options, "SELECT SKUs (↑↓ navigate, Enter select, Esc cancel)")
 
@@ -1105,9 +1132,31 @@ def select_edit_type_arrow():
     return select_menu_arrow(options, "SELECT EDIT TYPE (↑↓ navigate, Enter select, Esc cancel)")
 
 def run_mode(selection_key, edit_key, rows):
-    is_pct = EDIT_OPTIONS[edit_key][1]
     grp = GROUP_MAP[selection_key]
     label = SELECTION_OPTIONS[selection_key][0]
+    
+    if grp == "vat":
+        print(f"\n  {BOLD}{label}{RESET}")
+        changes = {}
+        for r in rows:
+            if r.price is None:
+                continue
+            new_p, capped = calc_price_vat(r.price)
+            changes[r.row_idx] = (r.price, new_p, capped)
+        tag = "vat_p7pct"
+        return changes, tag
+    elif grp == "markup_vat":
+        print(f"\n  {BOLD}{label}{RESET}")
+        changes = {}
+        for r in rows:
+            if r.price is None:
+                continue
+            new_p, capped = calc_price_markup_vat(r.price)
+            changes[r.row_idx] = (r.price, new_p, capped)
+        tag = "markup_x2.5_vat_p7pct"
+        return changes, tag
+    
+    is_pct = EDIT_OPTIONS[edit_key][1]
     edit_type = "pct" if is_pct else "flat"
     print(f"\n  {BOLD}{label} → {'percentage (%)' if is_pct else 'flat amount (฿)'}{RESET}")
     if grp == "all":
@@ -1195,14 +1244,17 @@ def editor_loop(file_path):
             print(f"  {DIM}Goodbye.{RESET}")
             return False
 
-        edit_key = select_edit_type_arrow()
-        if edit_key is None:
-            print(f"  {DIM}Cancelled.{RESET}")
-            continue
-        if edit_key == "q":
-            continue
-
-        changes, _ = run_mode(sel_key, edit_key, data_rows)
+        # VAT options don't need edit type selection
+        if sel_key in ("5", "6"):
+            changes, _ = run_mode(sel_key, None, data_rows)
+        else:
+            edit_key = select_edit_type_arrow()
+            if edit_key is None:
+                print(f"  {DIM}Cancelled.{RESET}")
+                continue
+            if edit_key == "q":
+                continue
+            changes, _ = run_mode(sel_key, edit_key, data_rows)
         if not changes:
             print(f"  {YELLOW}No changes computed.{RESET}")
             continue

@@ -16,7 +16,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from price_editor_core import (
     ProductRow, load_file, save_file, save_summary_report, make_output_path,
-    calc_price_pct, calc_price_flat, apply_adj, build_changes, merge_changes,
+    calc_price_pct, calc_price_flat, calc_price_vat, calc_price_markup_vat, apply_adj, build_changes, merge_changes,
     parse_variation, unique_products, price_range, get_fill, make_fill,
     CAPPED_FILL, NO_FILL, SHOPEE_MIN, SHOPEE_MAX, HEADER_ROWS,
     THAI_COLORS, BUILD_LABEL,
@@ -307,6 +307,9 @@ class PriceEditorApp(tk.Tk):
         edit_menu.add_command(label="By Color (+/- %)", command=lambda: self._start_edit("color", "pct"))
         edit_menu.add_command(label="By SKU (+/- %)", command=lambda: self._start_edit("sku", "pct"))
         edit_menu.add_separator()
+        edit_menu.add_command(label="VAT +7%", command=self._apply_vat)
+        edit_menu.add_command(label="Markup x2.5 + VAT", command=self._apply_markup_vat)
+        edit_menu.add_separator()
         edit_menu.add_command(label="All SKUs (+/- ฿)", command=lambda: self._start_edit("all", "flat"))
         edit_menu.add_command(label="By Size (+/- ฿)", command=lambda: self._start_edit("size", "flat"))
         edit_menu.add_command(label="By Color (+/- ฿)", command=lambda: self._start_edit("color", "flat"))
@@ -332,6 +335,8 @@ class PriceEditorApp(tk.Tk):
         ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=5)
         ttk.Button(tb, text="+/- Price %", width=12, command=lambda: self._start_edit("all", "pct")).pack(side="left", padx=2)
         ttk.Button(tb, text="+/- Price ฿", width=12, command=lambda: self._start_edit("all", "flat")).pack(side="left", padx=2)
+        ttk.Button(tb, text="VAT +7%", width=10, command=self._apply_vat).pack(side="left", padx=2)
+        ttk.Button(tb, text="x2.5+VAT", width=10, command=self._apply_markup_vat).pack(side="left", padx=2)
         ttk.Button(tb, text="📐 By Size", width=10, command=lambda: self._start_edit("size", "pct")).pack(side="left", padx=2)
         ttk.Button(tb, text="🎨 By Color", width=10, command=lambda: self._start_edit("color", "pct")).pack(side="left", padx=2)
         ttk.Button(tb, text="🏷 By SKU", width=10, command=lambda: self._start_edit("sku", "pct")).pack(side="left", padx=2)
@@ -1051,6 +1056,54 @@ class PriceEditorApp(tk.Tk):
             return
 
         tag = make_tag("filtered", value, is_pct)
+        self._show_preview(changes, tag)
+
+    def _apply_vat(self):
+        if not self.file_path or not self.rows:
+            messagebox.showinfo("No File", "Please open a file first.")
+            return
+        if self._is_processing:
+            return
+
+        min_price = self.min_price_var.get() if self.min_price_var.get() > 0 else None
+        changes = {}
+        for r in self.rows:
+            if r.price is None:
+                continue
+            if min_price is not None and r.price < min_price:
+                continue
+            new_p, capped = calc_price_vat(r.price)
+            changes[r.row_idx] = (r.price, new_p, capped)
+
+        if not changes:
+            messagebox.showwarning("No Changes", "No SKUs can be changed.")
+            return
+
+        tag = "vat_p7pct"
+        self._show_preview(changes, tag)
+
+    def _apply_markup_vat(self):
+        if not self.file_path or not self.rows:
+            messagebox.showinfo("No File", "Please open a file first.")
+            return
+        if self._is_processing:
+            return
+
+        min_price = self.min_price_var.get() if self.min_price_var.get() > 0 else None
+        changes = {}
+        for r in self.rows:
+            if r.price is None:
+                continue
+            if min_price is not None and r.price < min_price:
+                continue
+            new_p, capped = calc_price_markup_vat(r.price)
+            changes[r.row_idx] = (r.price, new_p, capped)
+
+        if not changes:
+            messagebox.showwarning("No Changes", "No SKUs can be changed.")
+            return
+
+        tag = "markup_x2.5_vat_p7pct"
         self._show_preview(changes, tag)
 
     def _start_edit(self, group, edit_type):

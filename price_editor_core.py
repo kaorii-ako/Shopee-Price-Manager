@@ -31,6 +31,7 @@ except ImportError:
 BUILD_LABEL = "SHOPEE PRICE EDITOR V1"
 SHOPEE_MIN = 1
 SHOPEE_MAX = 500_000
+VAT_RATE = 0.07
 HEADER_ROWS = 6
 COL_PRODUCT_ID   = 1
 COL_PRODUCT_NAME = 2
@@ -161,6 +162,26 @@ def calc_price_pct(old_price, pct):
 
 def calc_price_flat(old_price, amount):
     new_price = round(old_price + amount, 2)
+    capped = False
+    if new_price < SHOPEE_MIN:
+        new_price = SHOPEE_MIN
+        capped = True
+    if new_price > SHOPEE_MAX:
+        new_price = SHOPEE_MAX
+        capped = True
+    return new_price, capped
+
+def calc_price_vat(old_price):
+    new_price = round(old_price * (1 + VAT_RATE))
+    capped = False
+    if new_price > SHOPEE_MAX:
+        new_price = SHOPEE_MAX
+        capped = True
+    return new_price, capped
+
+def calc_price_markup_vat(old_price, markup=2.5):
+    cost = (old_price - 9) / 2
+    new_price = round(cost * markup * (1 + VAT_RATE))
     capped = False
     if new_price < SHOPEE_MIN:
         new_price = SHOPEE_MIN
